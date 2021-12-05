@@ -6,7 +6,7 @@ from cytomine.models.image import SliceInstanceCollection
 from shapely import wkt
 from shapely.affinity import affine_transform
 
-from config import DATASET_ROOT
+from src.config import DATASET_ROOT
 
 VERBOSE = False
 

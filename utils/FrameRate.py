@@ -1,6 +1,6 @@
 import time
 
-from config import FRAME_RATE
+from src.config import FRAME_RATE
 
 
 class FrameRate:

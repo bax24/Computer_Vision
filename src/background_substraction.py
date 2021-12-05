@@ -1,4 +1,3 @@
-import os
 import time
 from collections import deque
 
@@ -6,8 +5,7 @@ import cv2
 import numpy as np
 
 from src.config import DATASET_ROOT
-
-
+from utils.FrameRate import FrameRate
 #################################
 # Defining filters
 #################################
