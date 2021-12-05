@@ -108,7 +108,7 @@ if __name__ == '__main__':
     public_key = '5b827fdf-3d3a-4cfc-a831-8016b0ec122d'
     private_key = 'b52b59a9-95e4-4d95-b968-951b82860b50'
 
-    DATASET = os.path.join("../src", DATASET_ROOT)
+    DATASET = os.path.join(DATASET_ROOT, "raw2")
 
     download_annotations(public_key, private_key, DATASET)
     download_images(public_key, private_key, DATASET)
