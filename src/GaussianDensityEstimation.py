@@ -7,6 +7,9 @@ from utils.FrameRate import FrameRate
 from utils.utils import open_or_exit
 
 
+# TODO: https://www.cs.toronto.edu/~duvenaud/cookbook/
+# Interesting kernels
+
 class GaussianDensityEstimation:
     def __init__(self, memory_size, frame):
         self.frame_counter = 0
