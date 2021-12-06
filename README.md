@@ -1,16 +1,21 @@
 # Computer vision
 
 ## Installation
-- **Create a conda environment named `computer_vision` and activate it:**
+####**Create a conda environment named `computer_vision` and activate it:**
 
 `conda create --name computer_vision`
 
 `conda activate computer_vision` 
-- **Install the dependencies**
+
+#### **Install the dependencies**
 
 `pip install -r requirements.txt`
+
+#### Specify path
+In the [config.py](src/config.py) file, define the path to the root directory of the project in `PROJECT_ROOT`
 
 ## Create dataset
 1. `mkdir dataset`
 2. `python utils/get_annotations_bis.py`
 3. `python -c 'from utils.dataset import generate_dataset; generate_dataset()`
+

@@ -1,5 +1,5 @@
 import os
 
-PROJECT_ROOT = "/home/fares/PycharmProjects/computer_vision"
+PROJECT_ROOT = "/home/fares/PycharmProjects/Computer_Vision"
 DATASET_ROOT = os.path.join(PROJECT_ROOT, "dataset")
-FRAME_RATE = 10
+FRAME_RATE = 30

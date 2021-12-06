@@ -4,9 +4,9 @@ import time
 import cv2
 import pandas as pd
 
-from dataset import extract_annotations
 from src.config import DATASET_ROOT, FRAME_RATE
-from utils import draw_rectangle
+from utils.dataset import extract_annotations
+from utils.utils import draw_rectangle
 
 
 # TODO : this method works only with raw2 dataset -> make it use the clean dataset
@@ -54,6 +54,7 @@ def display_video_with_mask():
 
     cap.release()
     cv2.destroyAllWindows()
+
 
 # TODO: Debug
 if __name__ == "__main__":
