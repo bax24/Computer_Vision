@@ -9,7 +9,6 @@ class FrameRate:
         self.verbose = verbose
         self.frame_rate = frame_rate
 
-
     def update(self):
         time_elapsed = time.time() - self.last_time
         while time_elapsed <= 1. / self.frame_rate:

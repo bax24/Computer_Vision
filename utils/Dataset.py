@@ -8,7 +8,7 @@ from PIL import Image
 from tqdm import tqdm
 
 from src.config import DATASET_ROOT
-from utils import mkdir_if_not_exist
+from utils.utils import mkdir_if_not_exist
 
 CELL_RADIUS = 31 / 2
 DROPLET_RADIUS = 312 / 2

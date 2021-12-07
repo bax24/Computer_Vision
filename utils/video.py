@@ -4,8 +4,9 @@ import time
 import cv2
 import pandas as pd
 
+# noinspection PyUnresolvedReferences
 from src.config import DATASET_ROOT, FRAME_RATE
-from utils.dataset import extract_annotations
+from utils.Dataset import extract_annotations
 from utils.utils import draw_rectangle
 
 

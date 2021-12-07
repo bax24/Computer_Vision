@@ -32,9 +32,9 @@ for project in projects:
     annotations.fetch()
 
     for annot in annotations:
-
         print("ID: {} | Image: {} | Project: {} | Terms: {} | Track: {} | Slice: {}".format(
-            annot.id, annot.image, annot.project, terms.find_by_attribute("id", annot.term[0]), annot.track, annot.time))
+            annot.id, annot.image, annot.project, terms.find_by_attribute("id", annot.term[0]), annot.track,
+            annot.time))
 
         geometry = wkt.loads(annot.location)
         # print("Geometry from Shapely (cartesian coordinate system): {}".format(geometry))
@@ -47,4 +47,4 @@ for project in projects:
         geometry_opencv = affine_transform(geometry, [1, 0, 0, -1, 0, image.height])
         print(geometry_opencv)
 
-            # print("Geometry with OpenCV coordinate system: {}".format(geometry_opencv))
+        # print("Geometry with OpenCV coordinate system: {}".format(geometry_opencv))
