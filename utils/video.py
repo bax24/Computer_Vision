@@ -6,7 +6,7 @@ import pandas as pd
 
 # noinspection PyUnresolvedReferences
 from src.config import DATASET_ROOT, FRAME_RATE
-from utils.Dataset import extract_annotations
+from utils.GetDataset import extract_annotations
 from utils.utils import draw_rectangle
 
 

@@ -3,6 +3,7 @@ from scipy.stats import norm
 from BackgroundSubstractor import *
 
 
+# TODO: adapt this model the same way "GaussianKernelDensity" is done
 class GaussianMixtureModel(BackgroundSubstractor):
     def __init__(self, memory_size, frame, frame_scale=1., num_workers=1, num_chunks=None):
         super().__init__(memory_size, frame, frame_scale, num_workers, num_chunks)

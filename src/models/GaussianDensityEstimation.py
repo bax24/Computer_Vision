@@ -1,14 +1,18 @@
 from scipy.stats import norm
 
-from BackgroundSubstractor import *
+from src.models.BackgroundSubstractor import *
+
+
+# from BackgroundSubstractor import *
 
 
 # https://www.cs.toronto.edu/~duvenaud/cookbook/
 # Interesting kernels
 
 class GaussianDensityEstimation(BackgroundSubstractor):
-    def __init__(self, memory_size, frame, frame_scale=1., num_workers=1, num_chunks=None):
+    def __init__(self, memory_size, frame, frame_scale=1., num_workers=1, num_chunks=None, prob_threshold=1e-25):
         super().__init__(memory_size, frame, frame_scale, num_workers, num_chunks)
+        self.prob_threshold = prob_threshold
 
     def __call__(self, frame):
         frame = resize(frame, self.frame_scale)
@@ -22,7 +26,8 @@ class GaussianDensityEstimation(BackgroundSubstractor):
         workers_result = self.worker_pool.starmap(get_pdf, distributed_data)
         results = np.hstack(workers_result)
 
-        return resize(results.reshape(dim), 1. / self.frame_scale)
+        results = resize(results.reshape(dim), 1. / self.frame_scale)
+        return (results <= self.prob_threshold).astype(np.uint8) * 255
 
     def fill_memory(self, cap: cv2.VideoCapture):
         super(GaussianDensityEstimation, self).fill_memory(cap)

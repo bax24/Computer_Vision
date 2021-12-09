@@ -33,7 +33,6 @@ def extract_bbox(frame, mask, threshold):
 
 if __name__ == "__main__":
     path = f"{DATASET_ROOT}/raw2/images/CV2021_GROUP11/group11.mp4"
-    print(path)
     cap = open_or_exit(path)
 
     frame_scale = 0.5
@@ -56,7 +55,6 @@ if __name__ == "__main__":
     cap.set(2, 0.0)
 
     frame_rate = FrameRate(verbose=True, frame_rate=10)
-    frame_counter = 0
     while cap.isOpened():
 
         ret, img = cap.read()
