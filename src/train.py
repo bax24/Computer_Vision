@@ -6,18 +6,9 @@ import wandb
 from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
-from torch.utils.data import DataLoader
 
-from src.SegmentationDataset import SegmentationDataset
 from src.config import DATASET_ROOT, PROJECT_ROOT, WANDB_KEY
 from src.models.UNet import UNet
-
-DATASET_PATH = os.path.join(DATASET_ROOT, "clean")
-SEED = 15
-TEST_SIZE = 0.33
-SIZE = (64, 64)
-FEATURES = [64, 128, 256]
-BATCH_SIZE = 128
 
 
 def get_transforms(size):
@@ -32,41 +23,52 @@ def get_transforms(size):
     return transform
 
 
-checkpoint_callback = ModelCheckpoint(
-    monitor="valid_loss",
-    dirpath=os.path.join(PROJECT_ROOT, "models/"),
-    filename="sample-v2-{epoch:02d}-{val_loss:.5f}",
-    save_top_k=3,
-    mode="min"
-)
-
-seed_everything(SEED, workers=True)
-with open(WANDB_KEY, "r") as wandb_key:
-    wandb.login(key=wandb_key.read()[:-1])
-
-wandb_logger = WandbLogger(project="Computer vision", log_model="all")
+def get_checkpoint_callback():
+    return ModelCheckpoint(
+        monitor="val_loss",
+        dirpath=os.path.join(PROJECT_ROOT, "models/"),
+        filename="features-128-256-512-{epoch:02d}-{val_loss:.5f}",
+        save_top_k=1,
+        mode="min"
+    )
 
 
-train_dataset = SegmentationDataset(DATASET_PATH, train=True, test_size=TEST_SIZE,
-                                    transforms=get_transforms(SIZE))
-valid_dataset = SegmentationDataset(DATASET_PATH, train=False, test_size=TEST_SIZE,
-                                    transforms=get_transforms(SIZE))
+def init_training():
+    seed_everything(hparams["seed"], workers=True)
+    with open(WANDB_KEY, "r") as wandb_key:
+        wandb.login(key=wandb_key.read()[:-1])
 
-model = UNet(1, 1, features=FEATURES)
-train_dataloader = DataLoader(train_dataset, num_workers=3, batch_size=BATCH_SIZE)
-valid_dataloader = DataLoader(valid_dataset, num_workers=3, batch_size=BATCH_SIZE)
 
-wandb_logger.watch(model)
-trainer = Trainer(gpus=1,
-                  precision=16,
-                  check_val_every_n_epoch=1,
-                  auto_lr_find=1e-3,
-                  max_epochs=3,
-                  logger=wandb_logger,
-                  callbacks=[checkpoint_callback])
+def hyperparameters():
+    input_size = (128, 128)
+    return {
+        "dataset_path": os.path.join(DATASET_ROOT, "clean"),
+        "seed": 15,
+        "test_split": 0.33,
+        "input_size": input_size,
+        "model_features": [128, 256, 512],
+        "batch_size": 128,
+        "num_worker": 3,
+        "transforms": get_transforms(input_size)
+    }
 
-# trainer.tune(model)
-trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=valid_dataloader)
 
-model.load_from_checkpoint(checkpoint_callback.best_model_path)
-trainer.validate(model, val_dataloaders=valid_dataloader)
+if __name__ == "__main__":
+    hparams = hyperparameters()
+    init_training()
+
+    model = UNet(1, 1, args=hparams)
+    wandb_logger = WandbLogger(project="Computer vision", log_model="all")
+    wandb_logger.watch(model)
+    trainer = Trainer(
+        gpus=1,
+        precision=16,
+        check_val_every_n_epoch=1,
+        auto_lr_find=True,
+        max_epochs=5,
+        logger=wandb_logger,
+        callbacks=[get_checkpoint_callback()],
+    )
+
+    trainer.tune(model)
+    trainer.fit(model)

@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
         if ret:
             # GMM_mask = remove_noise(process_probs(GMM(img)), (10, 10), 10)
-            GDE_mask = remove_noise(process_probs(GDE(img)), (10, 10), 10)
+            GDE_mask = remove_noise(GDE(img), (10, 10), 10)
 
             frame_rate.update()
             # cv2.imshow("Original frame", img)

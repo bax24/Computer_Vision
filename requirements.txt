@@ -126,5 +126,5 @@ widgetsnbextension==3.5.2
 yarl==1.7.2
 zipp==3.6.0
 scipy~=1.7.1
-
 scikit-learn~=1.0.1
+wandb~=0.12.7

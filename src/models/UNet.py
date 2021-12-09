@@ -6,9 +6,12 @@ import torch.nn as nn
 import torch.nn.functional as func
 import torchvision.transforms.functional as tv_func
 from torch.optim import Adam
-
-
 # noinspection PyTypeChecker
+from torch.utils.data import DataLoader
+
+from src.SegmentationDataset import SegmentationDataset
+
+
 class DoubleConv(pl.core.LightningModule, ABC):
     def __init__(self, in_channels, out_channels):
         super(DoubleConv, self).__init__()
@@ -28,19 +31,23 @@ class DoubleConv(pl.core.LightningModule, ABC):
 
 # noinspection PyTypeChecker,PyCallingNonCallable
 class UNet(pl.core.LightningModule, ABC):
-    def __init__(self, in_channels=1, out_channels=3, features=None, batch_size=32, learning_rate=1e-3):
+    def __init__(self, in_channels=1, out_channels=3, learning_rate=1e-3, batch_size=32, args=None):
         super(UNet, self).__init__()
-        self.learning_rate = learning_rate
-        self.batch_size = batch_size
         self.save_hyperparameters()
+        self.args = args
 
-        if features is None:
-            features = [64, 128]
+        self.use_amp = True
+        self.lr = self.hparams.learning_rate
+        self.batch_size = self.hparams.batch_size
 
         self.ups = nn.ModuleList()
         self.downs = nn.ModuleList()
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
         self.out_channels = out_channels
+
+        features = self.args["model_features"]
+        if features is None:
+            features = [64, 128]
 
         # Down part
         for feature in features:
@@ -73,18 +80,37 @@ class UNet(pl.core.LightningModule, ABC):
         x, y = batch
         logits = self(x)
         loss = func.binary_cross_entropy_with_logits(logits, y)
-        self.log("valid_loss", loss)
+        self.log("val_loss", loss)
         return loss
 
-    def test_step(self, batch, batch_idx):
-        x, y = batch
-        logits = self(x)
-        loss = func.binary_cross_entropy_with_logits(logits, y)
-        self.log("test_loss", loss)
-        return loss
+    def train_dataloader(self):
+        dataset = SegmentationDataset(
+            self.args["dataset_path"],
+            train=True,
+            test_size=self.args["test_split"],
+            transforms=self.args["transforms"]
+        )
+        return DataLoader(
+            dataset,
+            num_workers=self.args["num_worker"],
+            batch_size=self.hparams.batch_size,
+            shuffle=True)
+
+    def val_dataloader(self):
+        dataset = SegmentationDataset(
+            self.args["dataset_path"],
+            train=False,
+            test_size=self.args["test_split"],
+            transforms=self.args["transforms"]
+        )
+        return DataLoader(
+            dataset,
+            num_workers=self.args["num_worker"],
+            batch_size=self.hparams.batch_size,
+            shuffle=False)
 
     def configure_optimizers(self):
-        return Adam(self.parameters(), lr=self.learning_rate)
+        return Adam(self.parameters(), lr=self.lr)
 
     def forward(self, x):
         skip_connections = []
