@@ -1,12 +1,26 @@
 from scipy.stats import norm
 
-from BackgroundSubstractor import *
+from src.models.BackgroundSubtractor import *
 
 
-# TODO: adapt this model the same way "GaussianKernelDensity" is done
-class GaussianMixtureModel(BackgroundSubstractor):
-    def __init__(self, memory_size, frame, frame_scale=1., num_workers=1, num_chunks=None):
-        super().__init__(memory_size, frame, frame_scale, num_workers, num_chunks)
+class GaussianMixtureModel(BackgroundSubtractor):
+    def __init__(self,
+                 memory_size,
+                 frame_dim,
+                 frame_scale=1.,
+                 num_workers=4,
+                 num_chunks=20,
+                 prob_threshold=1e-25,
+                 clean_params=((20, 20), 5)):
+
+        super().__init__(memory_size,
+                         frame_dim,
+                         frame_scale,
+                         num_workers,
+                         num_chunks,
+                         clean_params)
+
+        self.prob_threshold = prob_threshold
         self.mean = None
         self.std = None
 
@@ -27,9 +41,11 @@ class GaussianMixtureModel(BackgroundSubstractor):
 
         distributed_data = [t for t in zip(distributed_frame, distributed_mean, distributed_std)]
         workers_result = self.worker_pool.starmap(get_pdf, distributed_data)
-        results = np.hstack(workers_result)
 
-        return resize(results.reshape(dim), 1. / self.frame_scale)
+        result = np.hstack(workers_result)
+        result = resize(result.reshape(dim), 1. / self.frame_scale)
+        result = (result <= self.prob_threshold).astype(np.uint8) * 255
+        return self.clean_frame(result)
 
 
 def get_pdf(frame, mean, std):

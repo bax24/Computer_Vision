@@ -6,7 +6,7 @@ from cytomine.models.image import SliceInstanceCollection
 from shapely import wkt
 from shapely.affinity import affine_transform
 
-from src.config import DATASET_ROOT
+import src
 
 VERBOSE = False
 
@@ -105,10 +105,10 @@ def prepare_data_folders(data_path):
 
 
 if __name__ == '__main__':
-    public_key = '5b827fdf-3d3a-4cfc-a831-8016b0ec122d'
-    private_key = 'b52b59a9-95e4-4d95-b968-951b82860b50'
+    public_key_ = '5b827fdf-3d3a-4cfc-a831-8016b0ec122d'
+    private_key_ = 'b52b59a9-95e4-4d95-b968-951b82860b50'
 
-    DATASET = os.path.join(DATASET_ROOT, "raw2")
+    data_path_ = "{}/raw2".format(src.DATASET_ROOT)
+    download_annotations(public_key_, private_key_, data_path_)
 
-    download_annotations(public_key, private_key, DATASET)
-    download_images(public_key, private_key, DATASET)
+    download_images(public_key_, private_key_, data_path_)

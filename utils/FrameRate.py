@@ -1,10 +1,10 @@
 import time
 
-from src.config import FRAME_RATE
+from src import DEFAULT_FRAME_RATE
 
 
 class FrameRate:
-    def __init__(self, verbose=False, frame_rate=FRAME_RATE):
+    def __init__(self, verbose=False, frame_rate=DEFAULT_FRAME_RATE):
         self.last_time = time.time()
         self.verbose = verbose
         self.frame_rate = frame_rate

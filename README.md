@@ -11,8 +11,6 @@
 
 `pip install -r requirements.txt`
 
-#### Specify path
-In the [config.py](src/config.py) file, define the path to the root directory of the project in `PROJECT_ROOT`
 
 ## Create dataset
 1. `mkdir dataset`

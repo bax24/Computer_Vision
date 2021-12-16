@@ -1,17 +1,25 @@
 from scipy.stats import norm
 
-from src.models.BackgroundSubstractor import *
+from src.models.BackgroundSubtractor import *
 
 
-# from BackgroundSubstractor import *
+class GaussianDensityEstimation(BackgroundSubtractor):
+    def __init__(self,
+                 memory_size,
+                 frame_dim,
+                 frame_scale=1.,
+                 num_workers=4,
+                 num_chunks=20,
+                 prob_threshold=1e-25,
+                 clean_params=((20, 20), 5)):
 
+        super().__init__(memory_size,
+                         frame_dim,
+                         frame_scale,
+                         num_workers,
+                         num_chunks,
+                         clean_params)
 
-# https://www.cs.toronto.edu/~duvenaud/cookbook/
-# Interesting kernels
-
-class GaussianDensityEstimation(BackgroundSubstractor):
-    def __init__(self, memory_size, frame, frame_scale=1., num_workers=1, num_chunks=None, prob_threshold=1e-25):
-        super().__init__(memory_size, frame, frame_scale, num_workers, num_chunks)
         self.prob_threshold = prob_threshold
 
     def __call__(self, frame):
@@ -24,10 +32,11 @@ class GaussianDensityEstimation(BackgroundSubstractor):
 
         distributed_data = [t for t in zip(distributed_frame, distributed_memory)]
         workers_result = self.worker_pool.starmap(get_pdf, distributed_data)
-        results = np.hstack(workers_result)
 
-        results = resize(results.reshape(dim), 1. / self.frame_scale)
-        return (results <= self.prob_threshold).astype(np.uint8) * 255
+        result = np.hstack(workers_result)
+        result = resize(result.reshape(dim), 1. / self.frame_scale)
+        result = (result <= self.prob_threshold).astype(np.uint8) * 255
+        return self.clean_frame(result)
 
     def fill_memory(self, cap: cv2.VideoCapture):
         super(GaussianDensityEstimation, self).fill_memory(cap)

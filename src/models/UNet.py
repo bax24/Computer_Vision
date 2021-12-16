@@ -1,142 +1,194 @@
-from abc import ABC
+import os
+import sys
+from typing import Tuple
 
-import pytorch_lightning as pl
+import numpy as np
+import pandas as pd
 import torch
-import torch.nn as nn
-import torch.nn.functional as func
-import torchvision.transforms.functional as tv_func
-from torch.optim import Adam
-# noinspection PyTypeChecker
-from torch.utils.data import DataLoader
-
-from src.SegmentationDataset import SegmentationDataset
+from torch import nn
 
 
-class DoubleConv(pl.core.LightningModule, ABC):
-    def __init__(self, in_channels, out_channels):
-        super(DoubleConv, self).__init__()
+def conv_block(channels: Tuple[int, int],
+               size: Tuple[int, int],
+               stride: Tuple[int, int] = (1, 1),
+               N: int = 1):
+    """
+    Create a block with N convolutional layers with ReLU activation function.
+    The first layer is IN x OUT, and all others - OUT x OUT.
 
+    Args:
+        channels: (IN, OUT) - no. of input and output channels
+        size: kernel size (fixed for all convolution in a block)
+        stride: stride (fixed for all convolution in a block)
+        N: no. of convolutional layers
+
+    Returns:
+        A sequential container of N convolutional layers.
+    """
+    # a single convolution + batch normalization + ReLU block
+    block = lambda in_channels: nn.Sequential(
+        nn.Conv2d(in_channels=in_channels,
+                  out_channels=channels[1],
+                  kernel_size=size,
+                  stride=stride,
+                  bias=False,
+                  padding=(size[0] // 2, size[1] // 2)),
+        nn.BatchNorm2d(num_features=channels[1]),
+        nn.ReLU()
+    )
+    # create and return a sequential container of convolutional layers
+    # input size = channels[0] for first block and channels[1] for all others
+    return nn.Sequential(*[block(channels[bool(i)]) for i in range(N)])
+
+
+class ConvCat(nn.Module):
+    """Convolution with upsampling + concatenate block."""
+
+    def __init__(self,
+                 channels: Tuple[int, int],
+                 size: Tuple[int, int],
+                 stride: Tuple[int, int] = (1, 1),
+                 N: int = 1):
+        """
+        Create a sequential container with convolutional block (see conv_block)
+        with N convolutional layers and upsampling by factor 2.
+        """
+        super(ConvCat, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
+            conv_block(channels, size, stride, N),
+            nn.Upsample(scale_factor=2)
         )
 
-    def forward(self, x):
-        return self.conv(x)
+    def forward(self, to_conv: torch.Tensor, to_cat: torch.Tensor):
+        """Forward pass.
+
+        Args:
+            to_conv: input passed to convolutional block and upsampling
+            to_cat: input concatenated with the output of a conv block
+        """
+        return torch.cat([self.conv(to_conv), to_cat], dim=1)
 
 
-# noinspection PyTypeChecker,PyCallingNonCallable
-class UNet(pl.core.LightningModule, ABC):
-    def __init__(self, in_channels=1, out_channels=3, learning_rate=1e-3, batch_size=32, args=None):
+class UNet(nn.Module):
+    """
+    U-Net implementation.
+
+    Ref. O. Ronneberger et al. "U-net: Convolutional networks for biomedical
+    image segmentation."
+    """
+
+    def __init__(self, filters: int = 64, input_filters: int = 3, **kwargs):
+        """
+        Create U-Net model with:
+
+            * fixed kernel size = (3, 3)
+            * fixed max pooling kernel size = (2, 2) and upsampling factor = 2
+            * fixed no. of convolutional layers per block = 2 (see conv_block)
+            * constant no. of filters for convolutional layers
+
+        Args:
+            filters: no. of filters for convolutional layers
+            input_filters: no. of input channels
+        """
         super(UNet, self).__init__()
-        self.save_hyperparameters()
-        self.args = args
+        # first block channels size
+        initial_filters = (input_filters, filters)
+        # channels size for downsampling
+        down_filters = (filters, filters)
+        # channels size for upsampling (input doubled because of concatenate)
+        up_filters = (2 * filters, filters)
 
-        self.use_amp = True
-        self.lr = self.hparams.learning_rate
-        self.batch_size = self.hparams.batch_size
+        # downsampling
+        self.block1 = conv_block(channels=initial_filters, size=(3, 3), N=2)
+        self.block2 = conv_block(channels=down_filters, size=(3, 3), N=2)
+        self.block3 = conv_block(channels=down_filters, size=(3, 3), N=2)
 
-        self.ups = nn.ModuleList()
-        self.downs = nn.ModuleList()
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.out_channels = out_channels
+        # upsampling
+        self.block4 = ConvCat(channels=down_filters, size=(3, 3), N=2)
+        self.block5 = ConvCat(channels=up_filters, size=(3, 3), N=2)
+        self.block6 = ConvCat(channels=up_filters, size=(3, 3), N=2)
 
-        features = self.args["model_features"]
-        if features is None:
-            features = [64, 128]
+        # density prediction
+        self.block7 = conv_block(channels=up_filters, size=(3, 3), N=2)
+        self.density_pred = nn.Conv2d(in_channels=filters, out_channels=1,
+                                      kernel_size=(1, 1), bias=False)
 
-        # Down part
-        for feature in features:
-            self.downs.append(DoubleConv(in_channels, feature))
-            in_channels = feature
+    def forward(self, input: torch.Tensor):
+        """Forward pass."""
+        # Reshape the inputs
+        input = input.reshape(-1, 1, 240, 240).float()
+        # use the same max pooling kernel size (2, 2) across the network
+        pool = nn.MaxPool2d(2)
 
-        # Up part
-        for feature in reversed(features):
-            self.ups.append(
-                nn.ConvTranspose2d(
-                    feature * 2, feature, kernel_size=2, stride=2
-                )
-            )
-            self.ups.append(DoubleConv(feature * 2, feature))
+        # downsampling
+        block1 = self.block1(input)
+        pool1 = pool(block1)
+        block2 = self.block2(pool1)
+        pool2 = pool(block2)
+        block3 = self.block3(pool2)
+        pool3 = pool(block3)
 
-        self.bottleneck = DoubleConv(features[-1], features[-1] * 2)
-        self.final_conv = nn.Conv2d(features[0], out_channels, kernel_size=1)
+        # upsampling
+        block4 = self.block4(pool3, block3)
+        block5 = self.block5(block4, block2)
+        block6 = self.block6(block5, block1)
 
-    def optimizer_zero_grad(self, epoch, batch_idx, optimizer, optimizer_idx):
-        optimizer.zero_grad(set_to_none=True)
+        # density prediction
+        block7 = self.block7(block6)
+        return self.density_pred(block7)
 
-    def training_step(self, batch, batch_idx):
-        x, y = batch
-        logits = self(x)
-        loss = func.binary_cross_entropy_with_logits(logits, y)
-        self.log("train_loss", loss)
-        return loss
 
-    def validation_step(self, batch, batch_idx):
-        x, y = batch
-        logits = self(x)
-        loss = func.binary_cross_entropy_with_logits(logits, y)
-        self.log("val_loss", loss)
-        return loss
+def load_prev_unet(model, optimizer, name, path, device='cpu'):
+    starting_epoch = 0
 
-    def train_dataloader(self):
-        dataset = SegmentationDataset(
-            self.args["dataset_path"],
-            train=True,
-            test_size=self.args["test_split"],
-            transforms=self.args["transforms"]
-        )
-        return DataLoader(
-            dataset,
-            num_workers=self.args["num_worker"],
-            batch_size=self.hparams.batch_size,
-            shuffle=True)
+    # Directory management
+    if not os.path.exists('{}/{}'.format(path, name)):
+        os.mkdir('{}/{}'.format(path, name))
+    if not os.path.exists('{}/{}/model_weights.pt'.format(path, name)):
+        # Reset logs files:
+        f = open('{}/{}/logs.csv'.format(path, name), 'w')
+        f.write('epoch,train_loss,test_loss\n')
+        f.close()
+        return model, optimizer, starting_epoch
 
-    def val_dataloader(self):
-        dataset = SegmentationDataset(
-            self.args["dataset_path"],
-            train=False,
-            test_size=self.args["test_split"],
-            transforms=self.args["transforms"]
-        )
-        return DataLoader(
-            dataset,
-            num_workers=self.args["num_worker"],
-            batch_size=self.hparams.batch_size,
-            shuffle=False)
+    else:
+        try:
+            # Load logs file to determine the epoch index
+            logs = pd.read_csv('{}/{}/logs.csv'.format(path, name), sep=',')
+            starting_epoch = np.max(logs['epoch'].to_numpy()) + 1
 
-    def configure_optimizers(self):
-        return Adam(self.parameters(), lr=self.lr)
+            # Load model and optimizer weights
+            model.load_state_dict(torch.load('{}/{}/model_weights.pt'.format(path, name), map_location=device))
+            optimizer.load_state_dict(torch.load('{}/{}/optimizer_weights.pt'.format(path, name), map_location=device))
+        except:
+            print('ERROR: Impossible to load previous model')
+            sys.exit(1)
 
-    def forward(self, x):
-        skip_connections = []
+        return model, optimizer, starting_epoch
 
-        for down in self.downs:
-            x = down(x)  # Conv2D
-            skip_connections.append(x)
-            x = self.pool(x)  # MaxPooling
 
-        x = self.bottleneck(x)
-        skip_connections = skip_connections[::-1]
+def load_UNet(model, name, path, device):
+    try:
+        model.load_state_dict(torch.load('{}/{}/model_weights.pt'.format(path, name), map_location=device))
+    except:
+        print('ERROR: impossible to load the model at path {}/{}'.format(path, name))
+        sys.exit(1)
 
-        for idx in range(0, len(self.ups), 2):
-            x = self.ups[idx](x)  # ConvTranspose
-            # //2 because we have a step of 2
-            skip_connection = skip_connections[idx // 2]
 
-            # Verify that the skip connections have the same shape
-            if x.shape != skip_connection.shape:
-                x = tv_func.resize(x, size=skip_connection.shape[2:])
+# --- PYTESTS --- #
 
-            concat_skip = torch.cat((skip_connection, x), dim=1)
-            x = self.ups[idx + 1](concat_skip)  # DoubleConv
+def run_network(input_channels: int):
+    """Generate a random image, run through network, and check output size."""
+    sample = torch.ones((1, input_channels, 224, 224))
+    result = UNet(input_filters=input_channels)(sample)
+    assert result.shape == (1, 1, 224, 224)
 
-        if self.out_channels == 1:
-            # Do not forget to use a loss that combines a Sigmoid
-            return self.final_conv(x)
 
-        return nn.Softmax2d()(self.final_conv(x))
+def test_UNet_color():
+    """Test U-Net on RGB images."""
+    run_network(3)
+
+
+def test_UNet_grayscale():
+    """Test U-Net on grayscale images."""
+    run_network(1)
